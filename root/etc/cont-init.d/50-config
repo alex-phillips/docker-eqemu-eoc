@@ -1,0 +1,43 @@
+#!/usr/bin/with-contenv bash
+
+# set default values for variables
+declare -A EOC_CONF
+
+EOC_CONF[DB_HOST]=${DB_HOST:-mariadb}
+EOC_CONF[DB_PORT]=${DB_PORT:-3306}
+EOC_CONF[DB_NAME]=${DB_NAME:-peq}
+EOC_CONF[DB_USER]=${DB_USER:-root}
+EOC_CONF[DB_PASSWORD]=${DB_PASSWORD:-}
+EOC_CONF[DB_TIMEOUT]=${DB_TIMEOUT:-30}
+
+dbcmd="mysql -h ${EOC_CONF[DB_HOST]} -P ${EOC_CONF[DB_PORT]} -u "${EOC_CONF[DB_USER]}" "-p${EOC_CONF[DB_PASSWORD]}""
+echo $dbcmd
+echo "Waiting ${EOC_CONF[DB_TIMEOUT]}s for database to be ready..."
+counter=1
+while ! ${dbcmd} -e "show databases;" > /dev/null 2>&1; do
+    sleep 1
+    counter=$((counter + 1))
+    if [ ${counter} -gt ${EOC_CONF[DB_TIMEOUT]} ]; then
+        >&2 echo "ERROR: Failed to connect to database on ${EOC_CONF[DB_HOST]}"
+        exit 1
+    fi;
+done
+echo "Database ready!"
+
+cd /app/eoc
+
+if [ ! -f "/config/config.php" ]; then
+	mv /app/eoc/includes/config.example.php /config/config.php
+
+	sed -i 's|dbhost   = "mariadb"|dbhost   = "'${EOC_CONF[DB_HOST]}'"|g' /config/config.php
+	sed -i 's|dbname   = "peq"|dbname   = "peq'${EOC_CONF[DB_NAME]}'g' /config/config.php
+	sed -i 's|dbuser   = "root"|dbuser   = "'${EOC_CONF[DB_USER]}'"|g' /config/config.php
+	sed -i 's|dbpasswd = "root"|dbpasswd = "'${EOC_CONF[DB_PASSWORD]}'"|g' /config/config.php
+fi
+
+ln -sf /config/config.php /app/eoc/includes/config.php
+
+# permissions
+chown -R abc:abc \
+	/config \
+	/app/eoc
